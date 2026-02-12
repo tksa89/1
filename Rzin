@@ -596,7 +596,7 @@ findOverlap(float pD, bool isBull, string patName, float atr, float sensitivity,
     float bestScore = 0.0
     bool exactMatch = false
     int sz = array.size(patterns)
-    float pTol = 0.015
+    float pTol = 0.005
     if sz > 0
         for i = 0 to sz - 1
             if not exactMatch
@@ -605,11 +605,11 @@ findOverlap(float pD, bool isBull, string patName, float atr, float sensitivity,
                     exactMatch := true
                     idx := i
                     bestScore := p.score
-                else if not exactMatch and p.isBull == isBull and p.bB == bB and p.bC == bC
+                else if not exactMatch and p.isBull == isBull and p.name == patName and p.bB == bB and p.bC == bC
                     if idx == -1 or p.score > bestScore
                         idx := i
                         bestScore := p.score
-                else if not exactMatch and p.isBull == isBull
+                else if not exactMatch and p.isBull == isBull and p.name == patName
                     bool xP = pX > 0 ? math.abs(p.pX - pX) / pX <= pTol : false
                     bool aP = pA > 0 ? math.abs(p.pA - pA) / pA <= pTol : false
                     bool bP = pB > 0 ? math.abs(p.pB - pB) / pB <= pTol : false
@@ -950,7 +950,7 @@ purgeGhostDupes(float atr) =>
                         for j = i - 1 to 0
                             if not changed and j < array.size(patterns)
                                 Pattern b = array.get(patterns, j)
-                                if b.isGhost and a.isBull == b.isBull
+                                if b.isGhost and a.isBull == b.isBull and a.name == b.name
                                     bool dClose = atr > 0 ? math.abs(a.pD - b.pD) <= atr : false
                                     if dClose
                                         if a.score >= b.score
