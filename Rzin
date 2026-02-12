@@ -45,34 +45,27 @@ float i_TimeMultiplier = input.float(1.5, "⏱️ Time Stop / إيقاف زمن�
 // أعماق مدمجة — 8 أعماق كاملة (من الصغير للكبير)
 int d1 = 13
 int d2 = 21
+int d2b = 28
 int d3 = 34
-int d4 = 55
-int d5 = 89
-int d6 = 144
-int d7 = 233
+int d4 = 48
+int d5b = 55
+int d5 = 68
+int d6 = 89
+int d7 = 127
+int d8 = 144
 
-// ─── f_tierMin / f_tierMax — حدود الـ span لكل عمق ───
-// d1=13:  span≈104  → min=60,  max=500
-// d2=21:  span≈168  → min=60,  max=700
-// d3=34:  span≈272  → min=200, max=1100
-// d4=55:  span≈440  → min=200, max=1600
-// d5=89:  span≈712  → min=500, max=2800
-// d6=144: span≈1152 → min=500, max=4000
-// d7=233: span≈1864 → min=900, max=5000
+// ─── أرضية span لكل عمق — بدون سقف — البصمة تمنع التكرار ───
+int SCAN_DEPTH = 20
+
 f_tierMin(int depth) =>
-    depth <= 21 ? 60 : depth <= 55 ? 200 : depth <= 144 ? 500 : 900
+    depth <= 13 ? 20 : depth <= 21 ? 40 : depth <= 28 ? 55 : depth <= 34 ? 70 : depth <= 48 ? 120 : depth <= 55 ? 160 : depth <= 68 ? 200 : depth <= 89 ? 300 : depth <= 127 ? 500 : 600
 
-f_tierMax(int depth) =>
-    depth <= 13 ? 500 : depth <= 21 ? 700 : depth <= 34 ? 1100 : depth <= 55 ? 1600 : depth <= 89 ? 2800 : depth <= 144 ? 4000 : 5000
+// حد أدنى ديناميكي — يتكيف مع الفريم
 
-f_tierScan(int depth) =>
-    depth <= 21 ? 18 : depth <= 55 ? 16 : depth <= 144 ? 14 : 12
-
-var bool dirty1 = false, var bool dirty2 = false, var bool dirty3 = false
-var bool dirty4 = false, var bool dirty5 = false, var bool dirty6 = false
-var bool dirty7 = false
-var bool gd1 = false, var bool gd2 = false, var bool gd3 = false, var bool gd4 = false
-var bool gd5 = false, var bool gd6 = false, var bool gd7 = false
+// Dirty flags — 10 أعماق
+var bool dirty1 = false, var bool dirty2 = false, var bool dirty2b = false, var bool dirty3 = false
+var bool dirty4 = false, var bool dirty5b = false, var bool dirty5 = false, var bool dirty6 = false
+var bool dirty7 = false, var bool dirty8 = false
 
 // ─── 🦋 PATTERNS / الأنماط ───
 string G3 = "🦋 Patterns / الأنماط"
@@ -210,11 +203,14 @@ type Pattern
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 var array<Pivot> pv1 = array.new<Pivot>()
 var array<Pivot> pv2 = array.new<Pivot>()
+var array<Pivot> pv2b = array.new<Pivot>()
 var array<Pivot> pv3 = array.new<Pivot>()
 var array<Pivot> pv4 = array.new<Pivot>()
+var array<Pivot> pv5b = array.new<Pivot>()
 var array<Pivot> pv5 = array.new<Pivot>()
 var array<Pivot> pv6 = array.new<Pivot>()
 var array<Pivot> pv7 = array.new<Pivot>()
+var array<Pivot> pv8 = array.new<Pivot>()
 var array<Pattern> patterns = array.new<Pattern>()
 var array<line> gLines = array.new_line()
 var array<label> gLabels = array.new_label()
@@ -237,11 +233,14 @@ f_lvlNew(float lvl) =>
 float atrVal = ta.atr(14)
 float ph1 = ta.pivothigh(high, d1, d1), float pl1 = ta.pivotlow(low, d1, d1)
 float ph2 = ta.pivothigh(high, d2, d2), float pl2 = ta.pivotlow(low, d2, d2)
+float ph2b = ta.pivothigh(high, d2b, d2b), float pl2b = ta.pivotlow(low, d2b, d2b)
 float ph3 = ta.pivothigh(high, d3, d3), float pl3 = ta.pivotlow(low, d3, d3)
 float ph4 = ta.pivothigh(high, d4, d4), float pl4 = ta.pivotlow(low, d4, d4)
+float ph5b = ta.pivothigh(high, d5b, d5b), float pl5b = ta.pivotlow(low, d5b, d5b)
 float ph5 = ta.pivothigh(high, d5, d5), float pl5 = ta.pivotlow(low, d5, d5)
 float ph6 = ta.pivothigh(high, d6, d6), float pl6 = ta.pivotlow(low, d6, d6)
 float ph7 = ta.pivothigh(high, d7, d7), float pl7 = ta.pivotlow(low, d7, d7)
+float ph8 = ta.pivothigh(high, d8, d8), float pl8 = ta.pivotlow(low, d8, d8)
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // ║                              [06] تحديث المحاور                                         ║
@@ -278,6 +277,38 @@ updatePivots(array<Pivot> arr, float ph, float pl, int depth) =>
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 inRange(float v, float mn, float mx, float tol) =>
     v >= mn * (1.0 - tol) and v <= mx * (1.0 + tol)
+
+f_bcEnvelope(string name, float pB, float pC, float pD, float tol) =>
+    float bcMin = 0.0, float bcMax = 0.0
+    if name == "Gartley"
+        bcMin := 1.13, bcMax := 1.618
+    else if name == "Bat"
+        bcMin := 1.618, bcMax := 2.618
+    else if name == "Alt Bat"
+        bcMin := 2.0, bcMax := 3.618
+    else if name == "Butterfly"
+        bcMin := 1.618, bcMax := 2.618
+    else if name == "Crab"
+        bcMin := 2.618, bcMax := 3.618
+    else if name == "Deep Crab"
+        bcMin := 2.0, bcMax := 3.618
+    else if name == "Shark"
+        bcMin := 1.618, bcMax := 2.24
+    float bc = math.abs(pC - pB)
+    float cd = math.abs(pD - pC)
+    float rBCD = bc > 0 ? cd / bc : 0.0
+    rBCD >= bcMin * (1.0 - tol) and rBCD <= bcMax * (1.0 + tol)
+
+f_legOk(array<Pivot> arr, int i1, int i2, float p1, float p2) =>
+    bool ok = true
+    float lo = math.min(p1, p2)
+    float hi = math.max(p1, p2)
+    if i2 > i1 + 1
+        for k = i1 + 1 to i2 - 1
+            Pivot sk = array.get(arr, k)
+            if sk.price < lo or sk.price > hi
+                ok := false
+    ok
 
 // ╔═══════════════════════════════════════════════════════════════════════════════════════════╗
 // ║                    🏛️ TRIPLE DECOUPLING ENGINES (v60 Logic) 🏛️                            ║
@@ -466,7 +497,19 @@ getBRange(string n) =>
 
 getCRange(string n) =>
     float cMin = 0.382, float cMax = 0.886
-    if n == "Shark"
+    if n == "Gartley"
+        cMin := 0.382, cMax := 0.886
+    else if n == "Bat"
+        cMin := 0.382, cMax := 0.886
+    else if n == "Alt Bat"
+        cMin := 0.382, cMax := 0.886
+    else if n == "Butterfly"
+        cMin := 0.382, cMax := 0.886
+    else if n == "Crab"
+        cMin := 0.382, cMax := 0.886
+    else if n == "Deep Crab"
+        cMin := 0.886, cMax := 0.886
+    else if n == "Shark"
         cMin := 1.130, cMax := 1.618
     [cMin, cMax]
 
@@ -507,7 +550,8 @@ calcScore(string n, float rXAB, float rXAD, int bX, int bA, int bB, int bC) =>
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // W1: دقة النسب 30% | W2: السيولة 20% | W3: RSI Divergence 20%
 // W4: التوافق الزمني 15% | W5: الاتجاه العام 15%
-f_qualityScore(string patName, bool isBull, float rXAB, float rABC, float rXAD, int bX, int bA, int bB, int bC, int bD, float pX, float pD, float vAtD, float vAvgAtD, float rsiAtD, float rsiAtX, float emaAtD) =>
+f_qualityScore(string patName, bool isBull, float rXAB, float rABC, float rXAD, int bX, int bA, int bB, int bC, int bD, float pX, float pD) =>
+    // ─── W1: دقة النسب (30%) ───
     [bMin, bMax] = getBRange(patName)
     float idealB = (bMin + bMax) / 2.0
     float bErr = idealB > 0 ? math.abs(rXAB - idealB) / idealB : 1.0
@@ -519,54 +563,65 @@ f_qualityScore(string patName, bool isBull, float rXAB, float rABC, float rXAD, 
     float cErr = idealC > 0 ? math.abs(rABC - idealC) / idealC : 1.0
     float avgErr = (bErr + dErr + cErr) / 3.0
     float w1 = math.max(0.0, 1.0 - avgErr * 2.0) * 30.0
-    float vRat = vAvgAtD > 0 ? vAtD / vAvgAtD : 1.0
+    // ─── W2: السيولة عند D (20%) ───
+    int dLb = math.max(0, math.min(bar_index - bD, 4999))
+    float vAtD = volume[dLb]
+    float vAvg = volSma20[dLb]
+    float vRat = vAvg > 0 ? vAtD / vAvg : 1.0
     float w2 = vRat >= 2.0 ? 20.0 : vRat >= 1.5 ? 15.0 : vRat >= 1.0 ? 10.0 : 5.0
-    bool hasDiv = isBull ? (pD <= pX and rsiAtD > rsiAtX) : (pD >= pX and rsiAtD < rsiAtX)
+    // ─── W3: RSI Divergence (20%) ───
+    int xLb = math.max(0, math.min(bar_index - bX, 4999))
+    float rsiD = rsiVal[dLb]
+    float rsiX = rsiVal[xLb]
+    bool hasDiv = isBull ? (pD <= pX and rsiD > rsiX) : (pD >= pX and rsiD < rsiX)
     float w3 = hasDiv ? 20.0 : 0.0
+    // ─── W4: التوافق الزمني CD vs XA (15%) ───
     int xaDur = math.abs(bA - bX)
     int cdDur = math.abs(bD - bC)
     float tRat = (xaDur > 0 and cdDur > 0) ? math.min(float(cdDur) / float(xaDur), float(xaDur) / float(cdDur)) : 0.0
     float w4 = tRat * 15.0
-    bool trendOk = isBull ? (pD < emaAtD or close > emaAtD) : (pD > emaAtD or close < emaAtD)
+    // ─── W5: الاتجاه العام EMA(200) (15%) ───
+    float emaD = ema200[dLb]
+    bool trendOk = isBull ? (pD < emaD or close > emaD) : (pD > emaD or close < emaD)
     float w5 = trendOk ? 15.0 : 0.0
+    // ─── المجموع ───
     int totalQ = int(math.round(w1 + w2 + w3 + w4 + w5))
     [totalQ, hasDiv, vRat >= 1.5, trendOk]
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // ║              [11] فلتر التداخل + CONFLUENCE                                             ║
 // ═══════════════════════════════════════════════════════════════════════════════════════════
-findOverlap(float pD, bool isBull, string patName, float atr, float sensitivity, int bX, int bA, float pX, float pA, bool isGhostNew, int bB, int bC) =>
+findOverlap(float pD, bool isBull, string patName, float atr, float sensitivity, int bX, int bA, float pX, float pA, bool isGhostNew, int bB, int bC, float pB, float pC) =>
     int idx = -1
     float bestScore = 0.0
     bool exactMatch = false
     int sz = array.size(patterns)
+    float pTol = 0.015
     if sz > 0
         for i = 0 to sz - 1
             if not exactMatch
                 Pattern p = array.get(patterns, i)
-                // Exact match: نفس النمط + نفس الـ bars بالضبط
                 if p.isBull == isBull and p.name == patName and p.bX == bX and p.bA == bA
                     exactMatch := true
                     idx := i
                     bestScore := p.score
-                // Origin match: نفس B,C bars = نفس الهيكل بأسماء مختلفة
-                // Ghost Bat + Ghost Gartley من نفس X,A,B,C → الأقوى يبقى
                 else if not exactMatch and p.isBull == isBull and p.bB == bB and p.bC == bC
                     if idx == -1 or p.score > bestScore
                         idx := i
                         bestScore := p.score
-                // Zone match: D في نفس المنطقة
                 else if not exactMatch and p.isBull == isBull
-                    float zonePct = (isGhostNew or p.isGhost) ? 0.05 : 0.02
-                    float dPct = pD > 0 ? math.abs(p.pD - pD) / pD : 1.0
-                    if dPct <= zonePct
+                    bool xP = pX > 0 ? math.abs(p.pX - pX) / pX <= pTol : false
+                    bool aP = pA > 0 ? math.abs(p.pA - pA) / pA <= pTol : false
+                    bool bP = pB > 0 ? math.abs(p.pB - pB) / pB <= pTol : false
+                    bool cP = pC > 0 ? math.abs(p.pC - pC) / pC <= pTol : false
+                    if xP and aP and bP and cP
                         if idx == -1 or p.score > bestScore
                             idx := i
                             bestScore := p.score
     [idx, bestScore, exactMatch]
 
 addPattern(Pattern newP, float atr, float sensitivity) =>
-    [overlapIdx, existingScore, isExact] = findOverlap(newP.pD, newP.isBull, newP.name, atr, sensitivity, newP.bX, newP.bA, newP.pX, newP.pA, newP.isGhost, newP.bB, newP.bC)
+    [overlapIdx, existingScore, isExact] = findOverlap(newP.pD, newP.isBull, newP.name, atr, sensitivity, newP.bX, newP.bA, newP.pX, newP.pA, newP.isGhost, newP.bB, newP.bC, newP.pB, newP.pC)
     if overlapIdx >= 0
         Pattern existing = array.get(patterns, overlapIdx)
         // ─── أولوية الدمج ───
@@ -611,186 +666,197 @@ addPattern(Pattern newP, float atr, float sensitivity) =>
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 detectComplete(array<Pivot> arr, float atr, int depth) =>
     int sz = array.size(arr)
-    int minSpan = f_tierMin(depth)
-    int maxSpan = f_tierMax(depth)
-    int scanDep = f_tierScan(depth)
+    int tMin = f_tierMin(depth)
+    int MXS = 2
     if sz >= 5
-        int maxIdx = math.min(sz - 5, scanDep)
-        for idx = 0 to maxIdx
-            Pivot D = array.get(arr, idx)
-            Pivot C = array.get(arr, idx + 1)
-            Pivot B = array.get(arr, idx + 2)
-            Pivot A = array.get(arr, idx + 3)
-            Pivot X = array.get(arr, idx + 4)
-            if X.bar < A.bar and A.bar < B.bar and B.bar < C.bar and C.bar < D.bar and X.dir != A.dir and A.dir != B.dir and B.dir != C.dir and C.dir != D.dir and (bar_index - X.bar) < MAX_BARS and (D.bar - X.bar) >= minSpan and (D.bar - X.bar) <= maxSpan
-                float XA = math.abs(A.price - X.price)
-                float AB = math.abs(B.price - A.price)
-                float BC = math.abs(C.price - B.price)
-                if XA > 0.0 and AB > 0.0 and BC > 0.0
-                    float rXAB = AB / XA
-                    float rABC = BC / AB
-                    bool bull = D.dir == -1
-                    bool bValid = bull ? (B.price > X.price and B.price < A.price) : (B.price < X.price and B.price > A.price)
-                    bool cInsideA = bull ? C.price < A.price : C.price > A.price
-                    bool cOutsideA = not cInsideA
-                    float rXAD = 0.0
-                    string patName = ""
-                    if i_Shark and cOutsideA
-                        [bMin, bMax] = getBRange("Shark")
-                        [cMin, cMax] = getCRange("Shark")
-                        [dMin, dMax] = getDRange("Shark")
-                        rXAD := math.abs(D.price - A.price) / XA
-                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                            patName := "Shark"
-                    if patName == "" and bValid and cInsideA
-                        if i_DeepCrab
-                            [bMin, bMax] = getBRange("Deep Crab")
-                            [cMin, cMax] = getCRange("Deep Crab")
-                            [dMin, dMax] = getDRange("Deep Crab")
-                            rXAD := math.abs(D.price - A.price) / XA
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                                patName := "Deep Crab"
-                        if patName == "" and i_Gartley
-                            [bMin, bMax] = getBRange("Gartley")
-                            [cMin, cMax] = getCRange("Gartley")
-                            [dMin, dMax] = getDRange("Gartley")
-                            rXAD := math.abs(D.price - A.price) / XA
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                                patName := "Gartley"
-                        if patName == "" and i_Butterfly
-                            [bMin, bMax] = getBRange("Butterfly")
-                            [cMin, cMax] = getCRange("Butterfly")
-                            [dMin, dMax] = getDRange("Butterfly")
-                            rXAD := math.abs(D.price - A.price) / XA
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                                patName := "Butterfly"
-                        if patName == "" and i_Bat
-                            [bMin, bMax] = getBRange("Bat")
-                            [cMin, cMax] = getCRange("Bat")
-                            [dMin, dMax] = getDRange("Bat")
-                            rXAD := math.abs(D.price - A.price) / XA
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                                patName := "Bat"
-                        if patName == "" and i_AltBat
-                            [bMin, bMax] = getBRange("Alt Bat")
-                            [cMin, cMax] = getCRange("Alt Bat")
-                            [dMin, dMax] = getDRange("Alt Bat")
-                            rXAD := math.abs(D.price - A.price) / XA
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                                patName := "Alt Bat"
-                        if patName == "" and i_Crab
-                            [bMin, bMax] = getBRange("Crab")
-                            [cMin, cMax] = getCRange("Crab")
-                            [dMin, dMax] = getDRange("Crab")
-                            rXAD := math.abs(D.price - A.price) / XA
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
-                                patName := "Crab"
-                    if patName != ""
-                        float sc = calcScore(patName, rXAB, rXAD, X.bar, A.bar, B.bar, C.bar)
-                        int abDuration = math.abs(B.bar - A.bar)
-                        Pattern newP = Pattern.new(patName, bull, sc, X.price, A.price, B.price, C.price, D.price, X.bar, A.bar, B.bar, C.bar, D.bar, false, D.bar + int(abDuration * i_TimeMultiplier), 1, rXAB, rABC, rXAD)
-                        addPattern(newP, atr, i_Sensitivity)
-
+        int maxD = math.min(sz - 5, SCAN_DEPTH)
+        for iD = 0 to maxD
+            Pivot D = array.get(arr, iD)
+            int cEnd = math.min(iD + MXS + 1, sz - 4)
+            for iC = iD + 1 to cEnd
+                Pivot C = array.get(arr, iC)
+                if C.dir != D.dir and f_legOk(arr, iD, iC, D.price, C.price)
+                    int sk1 = iC - iD - 1
+                    int rem1 = MXS - sk1
+                    int bEnd = math.min(iC + rem1 + 1, sz - 3)
+                    for iB = iC + 1 to bEnd
+                        Pivot B = array.get(arr, iB)
+                        if B.dir != C.dir and f_legOk(arr, iC, iB, C.price, B.price)
+                            int sk2 = iB - iC - 1
+                            int rem2 = rem1 - sk2
+                            int aEnd = math.min(iB + rem2 + 1, sz - 2)
+                            for iA = iB + 1 to aEnd
+                                Pivot A = array.get(arr, iA)
+                                if A.dir != B.dir and f_legOk(arr, iB, iA, B.price, A.price)
+                                    int sk3 = iA - iB - 1
+                                    int rem3 = rem2 - sk3
+                                    int xEnd = math.min(iA + rem3 + 1, sz - 1)
+                                    for iX = iA + 1 to xEnd
+                                        Pivot X = array.get(arr, iX)
+                                        if X.dir != A.dir and f_legOk(arr, iA, iX, A.price, X.price)
+                                            int span = D.bar - X.bar
+                                            if X.bar < A.bar and A.bar < B.bar and B.bar < C.bar and C.bar < D.bar and (bar_index - X.bar) < MAX_BARS and span >= tMin
+                                                float XA = math.abs(A.price - X.price)
+                                                float AB = math.abs(B.price - A.price)
+                                                float BC = math.abs(C.price - B.price)
+                                                if XA > 0.0 and AB > 0.0 and BC > 0.0
+                                                    float rXAB = AB / XA
+                                                    float rABC = BC / AB
+                                                    bool bull = D.dir == -1
+                                                    bool bValid = bull ? (B.price > X.price and B.price < A.price) : (B.price < X.price and B.price > A.price)
+                                                    bool cInsideA = bull ? C.price < A.price : C.price > A.price
+                                                    bool cOutsideA = not cInsideA
+                                                    float rXAD = 0.0
+                                                    string patName = ""
+                                                    if i_Shark and cOutsideA
+                                                        [bMin, bMax] = getBRange("Shark")
+                                                        [cMin, cMax] = getCRange("Shark")
+                                                        [dMin, dMax] = getDRange("Shark")
+                                                        rXAD := math.abs(D.price - A.price) / XA
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                            patName := "Shark"
+                                                    if patName == "" and bValid and cInsideA
+                                                        if i_DeepCrab
+                                                            [bMin, bMax] = getBRange("Deep Crab")
+                                                            [cMin, cMax] = getCRange("Deep Crab")
+                                                            [dMin, dMax] = getDRange("Deep Crab")
+                                                            rXAD := math.abs(D.price - A.price) / XA
+                                                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                                patName := "Deep Crab"
+                                                        if patName == "" and i_Gartley
+                                                            [bMin, bMax] = getBRange("Gartley")
+                                                            [cMin, cMax] = getCRange("Gartley")
+                                                            [dMin, dMax] = getDRange("Gartley")
+                                                            rXAD := math.abs(D.price - A.price) / XA
+                                                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                                patName := "Gartley"
+                                                        if patName == "" and i_Butterfly
+                                                            [bMin, bMax] = getBRange("Butterfly")
+                                                            [cMin, cMax] = getCRange("Butterfly")
+                                                            [dMin, dMax] = getDRange("Butterfly")
+                                                            rXAD := math.abs(D.price - A.price) / XA
+                                                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                                patName := "Butterfly"
+                                                        if patName == "" and i_Bat
+                                                            [bMin, bMax] = getBRange("Bat")
+                                                            [cMin, cMax] = getCRange("Bat")
+                                                            [dMin, dMax] = getDRange("Bat")
+                                                            rXAD := math.abs(D.price - A.price) / XA
+                                                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                                patName := "Bat"
+                                                        if patName == "" and i_AltBat
+                                                            [bMin, bMax] = getBRange("Alt Bat")
+                                                            [cMin, cMax] = getCRange("Alt Bat")
+                                                            [dMin, dMax] = getDRange("Alt Bat")
+                                                            rXAD := math.abs(D.price - A.price) / XA
+                                                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                                patName := "Alt Bat"
+                                                        if patName == "" and i_Crab
+                                                            [bMin, bMax] = getBRange("Crab")
+                                                            [cMin, cMax] = getCRange("Crab")
+                                                            [dMin, dMax] = getDRange("Crab")
+                                                            rXAD := math.abs(D.price - A.price) / XA
+                                                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol) and inRange(rXAD, dMin, dMax, i_Tol)
+                                                                patName := "Crab"
+                                                    if patName != ""
+                                                        if f_bcEnvelope(patName, B.price, C.price, D.price, i_Tol)
+                                                            float sc = calcScore(patName, rXAB, rXAD, X.bar, A.bar, B.bar, C.bar)
+                                                            if sc >= 15.0
+                                                                int abDuration = math.abs(B.bar - A.bar)
+                                                                Pattern newP = Pattern.new(patName, bull, sc, X.price, A.price, B.price, C.price, D.price, X.bar, A.bar, B.bar, C.bar, D.bar, false, D.bar + int(abDuration * i_TimeMultiplier), 1, rXAB, rABC, rXAD)
+                                                                addPattern(newP, atr, i_Sensitivity)
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // ║              [13] كشف الاستباقي                                                         ║
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 detectEmerging(array<Pivot> arr, float atr, int depth) =>
     int sz = array.size(arr)
-    int minSpan = f_tierMin(depth)
-    int maxSpan = f_tierMax(depth)
-    int scanDep = f_tierScan(depth)
-    int maxSkip = depth <= 21 ? 2 : depth <= 55 ? 3 : depth <= 144 ? 4 : 5
+    int tMin = f_tierMin(depth)
+    int MXS = 2
     if sz >= 4
-        int cLim = math.min(sz - 4, scanDep)
-        for ci = 0 to cLim
-            Pivot C = array.get(arr, ci)
-            int bEnd = math.min(ci + maxSkip, sz - 3)
-            for bi = ci + 1 to bEnd
-                Pivot B = array.get(arr, bi)
-                if B.dir == C.dir
-                    continue
-                float BC = math.abs(C.price - B.price)
-                int aEnd = math.min(bi + maxSkip, sz - 2)
-                for ai = bi + 1 to aEnd
-                    Pivot A = array.get(arr, ai)
-                    if A.dir == B.dir
-                        continue
-                    float AB = math.abs(B.price - A.price)
-                    if AB <= 0.0 or BC <= 0.0
-                        continue
-                    float rABC = BC / AB
-                    if rABC < 0.30 or rABC > 2.0
-                        continue
-                    int xEnd = math.min(ai + maxSkip, sz - 1)
-                    for xi = ai + 1 to xEnd
-                        Pivot X = array.get(arr, xi)
-                        if X.dir == A.dir
-                            continue
-                        int timeXA = math.abs(A.bar - X.bar)
-                        int span = bar_index - X.bar
-                        if span < minSpan or span > maxSpan or bar_index > (C.bar + timeXA * 3)
-                            continue
-                        float XA = math.abs(A.price - X.price)
-                        if XA <= 0.0
-                            continue
-                        float rXAB = AB / XA
-                        bool isBull = X.dir == -1
-                        bool bValid = isBull ? (B.price > X.price and B.price < A.price) : (B.price < X.price and B.price > A.price)
-                        bool cInsideA = isBull ? C.price < A.price : C.price > A.price
-                        bool cOutsideA = not cInsideA
-                        bool bBreakout = isBull ? close < B.price : close > B.price
-                        if not bBreakout
-                            continue
-                        string gName = ""
-                        if i_Shark and cOutsideA
-                            [bMin, bMax] = getBRange("Shark")
-                            [cMin, cMax] = getCRange("Shark")
-                            if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                gName := "Shark"
-                        if gName == "" and bValid and cInsideA
-                            if i_DeepCrab
-                                [bMin, bMax] = getBRange("Deep Crab")
-                                [cMin, cMax] = getCRange("Deep Crab")
-                                if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                    gName := "Deep Crab"
-                            if gName == "" and i_Gartley
-                                [bMin, bMax] = getBRange("Gartley")
-                                [cMin, cMax] = getCRange("Gartley")
-                                if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                    gName := "Gartley"
-                            if gName == "" and i_Butterfly
-                                [bMin, bMax] = getBRange("Butterfly")
-                                [cMin, cMax] = getCRange("Butterfly")
-                                if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                    gName := "Butterfly"
-                            if gName == "" and i_Bat
-                                [bMin, bMax] = getBRange("Bat")
-                                [cMin, cMax] = getCRange("Bat")
-                                if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                    gName := "Bat"
-                            if gName == "" and i_AltBat
-                                [bMin, bMax] = getBRange("Alt Bat")
-                                [cMin, cMax] = getCRange("Alt Bat")
-                                if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                    gName := "Alt Bat"
-                            if gName == "" and i_Crab
-                                [bMin, bMax] = getBRange("Crab")
-                                [cMin, cMax] = getCRange("Crab")
-                                if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
-                                    gName := "Crab"
-                        if gName != ""
-                            [xaTarget, xaRatio] = calc_XA_Anchor(gName, X.price, A.price, isBull)
-                            float targetD = na(xaTarget) ? close : xaTarget
-                            int projBar = C.bar + timeXA
-                            if projBar <= bar_index
-                                projBar := bar_index + 5
-                            [dMin, dMax] = getDRange(gName)
-                            float idealD = (dMin + dMax) / 2.0
-                            float sc = calcScore(gName, rXAB, idealD, X.bar, A.bar, B.bar, C.bar)
-                            int abDuration = math.abs(B.bar - A.bar)
-                            Pattern ghost = Pattern.new(gName, isBull, sc, X.price, A.price, B.price, C.price, targetD, X.bar, A.bar, B.bar, C.bar, projBar, true, projBar + int(abDuration * i_TimeMultiplier), 1, rXAB, rABC, idealD)
-                            addPattern(ghost, atr, i_Sensitivity)
-
+        int maxC = math.min(sz - 4, SCAN_DEPTH)
+        for iC = 0 to maxC
+            Pivot C = array.get(arr, iC)
+            int bEnd = math.min(iC + MXS + 1, sz - 3)
+            for iB = iC + 1 to bEnd
+                Pivot B = array.get(arr, iB)
+                if B.dir != C.dir and f_legOk(arr, iC, iB, C.price, B.price)
+                    int sk1 = iB - iC - 1
+                    int rem1 = MXS - sk1
+                    int aEnd = math.min(iB + rem1 + 1, sz - 2)
+                    for iA = iB + 1 to aEnd
+                        Pivot A = array.get(arr, iA)
+                        if A.dir != B.dir and f_legOk(arr, iB, iA, B.price, A.price)
+                            int sk2 = iA - iB - 1
+                            int rem2 = rem1 - sk2
+                            int xEnd = math.min(iA + rem2 + 1, sz - 1)
+                            for iX = iA + 1 to xEnd
+                                Pivot X = array.get(arr, iX)
+                                if X.dir != A.dir and f_legOk(arr, iA, iX, A.price, X.price)
+                                    int timeXA = math.abs(A.bar - X.bar)
+                                    int span = bar_index - X.bar
+                                    if X.bar < A.bar and A.bar < B.bar and B.bar < C.bar and bar_index <= (C.bar + timeXA * 3) and span >= tMin
+                                        float XA = math.abs(A.price - X.price)
+                                        float AB = math.abs(B.price - A.price)
+                                        float BC = math.abs(C.price - B.price)
+                                        if XA > 0.0 and AB > 0.0 and BC > 0.0
+                                            float rXAB = AB / XA
+                                            float rABC = BC / AB
+                                            bool isBull = X.dir == -1
+                                            bool bValid = isBull ? (B.price > X.price and B.price < A.price) : (B.price < X.price and B.price > A.price)
+                                            bool cInsideA = isBull ? C.price < A.price : C.price > A.price
+                                            bool cOutsideA = not cInsideA
+                                            bool bBreakout = isBull ? close < B.price : close > B.price
+                                            if bBreakout
+                                                string gName = ""
+                                                if i_Shark and cOutsideA
+                                                    [bMin, bMax] = getBRange("Shark")
+                                                    [cMin, cMax] = getCRange("Shark")
+                                                    if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                        gName := "Shark"
+                                                if gName == "" and bValid and cInsideA
+                                                    if i_DeepCrab
+                                                        [bMin, bMax] = getBRange("Deep Crab")
+                                                        [cMin, cMax] = getCRange("Deep Crab")
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                            gName := "Deep Crab"
+                                                    if gName == "" and i_Gartley
+                                                        [bMin, bMax] = getBRange("Gartley")
+                                                        [cMin, cMax] = getCRange("Gartley")
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                            gName := "Gartley"
+                                                    if gName == "" and i_Butterfly
+                                                        [bMin, bMax] = getBRange("Butterfly")
+                                                        [cMin, cMax] = getCRange("Butterfly")
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                            gName := "Butterfly"
+                                                    if gName == "" and i_Bat
+                                                        [bMin, bMax] = getBRange("Bat")
+                                                        [cMin, cMax] = getCRange("Bat")
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                            gName := "Bat"
+                                                    if gName == "" and i_AltBat
+                                                        [bMin, bMax] = getBRange("Alt Bat")
+                                                        [cMin, cMax] = getCRange("Alt Bat")
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                            gName := "Alt Bat"
+                                                    if gName == "" and i_Crab
+                                                        [bMin, bMax] = getBRange("Crab")
+                                                        [cMin, cMax] = getCRange("Crab")
+                                                        if inRange(rXAB, bMin, bMax, i_Tol) and inRange(rABC, cMin, cMax, i_Tol)
+                                                            gName := "Crab"
+                                                if gName != ""
+                                                    [xaTarget, xaRatio] = calc_XA_Anchor(gName, X.price, A.price, isBull)
+                                                    float targetD = na(xaTarget) ? close : xaTarget
+                                                    int projBar = C.bar + timeXA
+                                                    if projBar <= bar_index
+                                                        projBar := bar_index + 5
+                                                    [dMin, dMax] = getDRange(gName)
+                                                    float idealD = (dMin + dMax) / 2.0
+                                                    float sc = calcScore(gName, rXAB, idealD, X.bar, A.bar, B.bar, C.bar)
+                                                    if sc >= 15.0
+                                                        int abDuration = math.abs(B.bar - A.bar)
+                                                        Pattern ghost = Pattern.new(gName, isBull, sc, X.price, A.price, B.price, C.price, targetD, X.bar, A.bar, B.bar, C.bar, projBar, true, projBar + int(abDuration * i_TimeMultiplier), 1, rXAB, rABC, idealD)
+                                                        addPattern(ghost, atr, i_Sensitivity)
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // ║                              [14-15] Ghost Helpers                                      ║
 // ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -871,33 +937,71 @@ cleanStale() =>
                 if remove
                     array.remove(patterns, i)
 
+purgeGhostDupes(float atr) =>
+    bool changed = true
+    while changed
+        changed := false
+        int sz = array.size(patterns)
+        if sz > 1
+            for i = sz - 1 to 1
+                if not changed and i < array.size(patterns)
+                    Pattern a = array.get(patterns, i)
+                    if a.isGhost
+                        for j = i - 1 to 0
+                            if not changed and j < array.size(patterns)
+                                Pattern b = array.get(patterns, j)
+                                if b.isGhost and a.isBull == b.isBull
+                                    bool dClose = atr > 0 ? math.abs(a.pD - b.pD) <= atr : false
+                                    if dClose
+                                        if a.score >= b.score
+                                            a.confluence := a.confluence + b.confluence
+                                            array.set(patterns, i, a)
+                                            array.remove(patterns, j)
+                                        else
+                                            b.confluence := b.confluence + a.confluence
+                                            array.set(patterns, j, b)
+                                            array.remove(patterns, i)
+                                        changed := true
+
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // ║              [16] التنفيذ الرئيسي                                                       ║
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 if barstate.isconfirmed
     updatePivots(pv1, ph1, pl1, d1)
     updatePivots(pv2, ph2, pl2, d2)
+    updatePivots(pv2b, ph2b, pl2b, d2b)
     updatePivots(pv3, ph3, pl3, d3)
     updatePivots(pv4, ph4, pl4, d4)
+    updatePivots(pv5b, ph5b, pl5b, d5b)
     updatePivots(pv5, ph5, pl5, d5)
     updatePivots(pv6, ph6, pl6, d6)
     updatePivots(pv7, ph7, pl7, d7)
+    updatePivots(pv8, ph8, pl8, d8)
     
     if not na(ph1) or not na(pl1)
-        dirty1 := true, gd1 := true
+        dirty1 := true
     if not na(ph2) or not na(pl2)
-        dirty2 := true, gd2 := true
+        dirty2 := true
+    if not na(ph2b) or not na(pl2b)
+        dirty2b := true
     if not na(ph3) or not na(pl3)
-        dirty3 := true, gd3 := true
+        dirty3 := true
     if not na(ph4) or not na(pl4)
-        dirty4 := true, gd4 := true
+        dirty4 := true
+    if not na(ph5b) or not na(pl5b)
+        dirty5b := true
     if not na(ph5) or not na(pl5)
-        dirty5 := true, gd5 := true
+        dirty5 := true
     if not na(ph6) or not na(pl6)
-        dirty6 := true, gd6 := true
+        dirty6 := true
     if not na(ph7) or not na(pl7)
-        dirty7 := true, gd7 := true
+        dirty7 := true
+    if not na(ph8) or not na(pl8)
+        dirty8 := true
     
+    if dirty8
+        detectComplete(pv8, atrVal, d8)
+        dirty8 := false
     if dirty7
         detectComplete(pv7, atrVal, d7)
         dirty7 := false
@@ -907,12 +1011,18 @@ if barstate.isconfirmed
     if dirty5
         detectComplete(pv5, atrVal, d5)
         dirty5 := false
+    if dirty5b
+        detectComplete(pv5b, atrVal, d5b)
+        dirty5b := false
     if dirty4
         detectComplete(pv4, atrVal, d4)
         dirty4 := false
     if dirty3
         detectComplete(pv3, atrVal, d3)
         dirty3 := false
+    if dirty2b
+        detectComplete(pv2b, atrVal, d2b)
+        dirty2b := false
     if dirty2
         detectComplete(pv2, atrVal, d2)
         dirty2 := false
@@ -922,30 +1032,19 @@ if barstate.isconfirmed
     
     promoteGhosts(atrVal)
 
-    if gd7
-        detectEmerging(pv7, atrVal, d7)
-        gd7 := false
-    if gd6
-        detectEmerging(pv6, atrVal, d6)
-        gd6 := false
-    if gd5
-        detectEmerging(pv5, atrVal, d5)
-        gd5 := false
-    if gd4
-        detectEmerging(pv4, atrVal, d4)
-        gd4 := false
-    if gd3
-        detectEmerging(pv3, atrVal, d3)
-        gd3 := false
-    if gd2
-        detectEmerging(pv2, atrVal, d2)
-        gd2 := false
-    if gd1
-        detectEmerging(pv1, atrVal, d1)
-        gd1 := false
-
 if barstate.islast
     removeGhosts()
+    detectEmerging(pv8, atrVal, d8)
+    detectEmerging(pv7, atrVal, d7)
+    detectEmerging(pv6, atrVal, d6)
+    detectEmerging(pv5, atrVal, d5)
+    detectEmerging(pv5b, atrVal, d5b)
+    detectEmerging(pv4, atrVal, d4)
+    detectEmerging(pv3, atrVal, d3)
+    detectEmerging(pv2b, atrVal, d2b)
+    detectEmerging(pv2, atrVal, d2)
+    detectEmerging(pv1, atrVal, d1)
+    purgeGhostDupes(atrVal)
     while array.size(patterns) > MAX_PAT
         array.pop(patterns)
 
@@ -974,7 +1073,9 @@ if barstate.islast
                 color mainCol = p.isGhost ? T_GHOST : (p.isBull ? T_BULL : T_BEAR)
                 color lineCol = color.new(T_LSR, 20)
                 color fadeCol = color.new(T_LSR, 70)
-                int dBar = p.isGhost ? (p.bC + 3) : p.bD
+                int patSpan = math.abs(p.bC - p.bX)
+                int cdLen = p.isGhost ? math.max(5, int(patSpan * 0.15)) : 0
+                int dBar = p.isGhost ? (p.bC + cdLen) : p.bD
                 float dPrice = p.pD
                 // أضلاع النمط
                 array.push(gLines, line.new(p.bX, p.pX, p.bA, p.pA, color=lineCol, style=line.style_dotted, width=1))
@@ -1015,9 +1116,7 @@ if barstate.islast
                 // 🧠 Quality Score — عرض النسبة بجانب اسم المكتمل
                 string qTxt = ""
                 if not p.isGhost
-                    int _dLb1 = math.max(0, math.min(bar_index - p.bD, 4999))
-                    int _xLb1 = math.max(0, math.min(bar_index - p.bX, 4999))
-                    [qs, qd, qv, qt] = f_qualityScore(p.name, p.isBull, p.rXAB, p.rABC, p.rXAD, p.bX, p.bA, p.bB, p.bC, p.bD, p.pX, p.pD, volume[_dLb1], volSma20[_dLb1], rsiVal[_dLb1], rsiVal[_xLb1], ema200[_dLb1])
+                    [qs, qd, qv, qt] = f_qualityScore(p.name, p.isBull, p.rXAB, p.rABC, p.rXAD, p.bX, p.bA, p.bB, p.bC, p.bD, p.pX, p.pD)
                     qTxt := " " + str.tostring(qs) + "%"
                 string nameTxt = f_patName(p.name) + (p.isGhost ? " ◎" : "") + qTxt + confTxt + sensorTxt
                 // اسم النمط عند D بمسافة 0.3%
@@ -1280,9 +1379,7 @@ if barstate.isconfirmed and i_EnableAlerts
             string dir = p.isBull ? _V3_BULL : _V3_BEAR
             string pName = f_patName(p.name)
             // ─── Quality Score ───
-            int _dLb2 = math.max(0, math.min(bar_index - p.bD, 4999))
-            int _xLb2 = math.max(0, math.min(bar_index - p.bX, 4999))
-            [qScore, qDiv, qVol, qTrend] = f_qualityScore(p.name, p.isBull, p.rXAB, p.rABC, p.rXAD, p.bX, p.bA, p.bB, p.bC, p.bD, p.pX, p.pD, volume[_dLb2], volSma20[_dLb2], rsiVal[_dLb2], rsiVal[_xLb2], ema200[_dLb2])
+            [qScore, qDiv, qVol, qTrend] = f_qualityScore(p.name, p.isBull, p.rXAB, p.rABC, p.rXAD, p.bX, p.bA, p.bB, p.bC, p.bD, p.pX, p.pD)
             string grade = f_qGrade(qScore)
             string qBar = f_qBar(qScore)
             // ─── TP/SL ───
